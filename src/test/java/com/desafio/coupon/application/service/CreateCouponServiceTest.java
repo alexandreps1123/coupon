@@ -67,4 +67,29 @@ class CreateCouponServiceTest {
             )
         );
     }
+
+    @Test
+    void shouldReturnSameCouponWhenCreateRequestIsIdempotent() {
+        String baseCode = ("I" + UUID.randomUUID().toString().replace("-", "")).substring(0, 6);
+        LocalDateTime expirationDate = LocalDateTime.now().plusDays(10);
+
+        CouponDto first = createCouponService.execute(
+            baseCode,
+            "Same coupon",
+            new BigDecimal("10.50"),
+            expirationDate,
+            false
+        );
+
+        CouponDto second = createCouponService.execute(
+            baseCode,
+            "Same coupon",
+            new BigDecimal("10.50"),
+            expirationDate,
+            false
+        );
+
+        assertEquals(first.id(), second.id());
+        assertEquals(first.code(), second.code());
+    }
 }

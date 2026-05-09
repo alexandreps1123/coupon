@@ -1,13 +1,5 @@
 package com.desafio.coupon.adapter.rest.controller;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpStatus;
-import org.springframework.test.context.ActiveProfiles;
-
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -18,8 +10,24 @@ import java.net.http.HttpResponse;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import javax.net.ssl.SSLSession;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.http.HttpStatus;
+import org.springframework.test.context.ActiveProfiles;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 /**
  * Integration tests for CouponController.
@@ -273,6 +281,67 @@ class CouponControllerIntegrationTest {
         assertTrue(response.body().get("message").asText().contains("not found"));
     }
 
+    @Test
+    void shouldHandleConcurrentCouponCreation() throws Exception {
+        ExecutorService executor = Executors.newFixedThreadPool(10);
+        CompletableFuture<Void> allFutures = CompletableFuture.allOf(
+            CompletableFuture.runAsync(() -> {
+                try {
+                    HttpResponse<JsonNode> response = postCoupon("CON001", "Concurrent coupon 1", new BigDecimal("10.00"), LocalDateTime.now().plusDays(30), false);
+                    assertEquals(HttpStatus.CREATED.value(), response.statusCode());
+                } catch (IOException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }, executor),
+            CompletableFuture.runAsync(() -> {
+                try {
+                    HttpResponse<JsonNode> response = postCoupon("CON002", "Concurrent coupon 2", new BigDecimal("10.00"), LocalDateTime.now().plusDays(30), false);
+                    assertEquals(HttpStatus.CREATED.value(), response.statusCode());
+                } catch (IOException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }, executor),
+            CompletableFuture.runAsync(() -> {
+                try {
+                    HttpResponse<JsonNode> response = postCoupon("CON003", "Concurrent coupon 3", new BigDecimal("10.00"), LocalDateTime.now().plusDays(30), false);
+                    assertEquals(HttpStatus.CREATED.value(), response.statusCode());
+                } catch (IOException | InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
+            }, executor)
+        );
+        allFutures.join();
+        executor.shutdown();
+    }
+
+    @Test
+    void shouldReturnResponseWithCorrectContract() throws Exception {
+        HttpResponse<JsonNode> response = postCoupon(
+            "CTR001",
+            "Contract test coupon",
+            new BigDecimal("10.50"),
+            LocalDateTime.now().plusDays(30),
+            true
+        );
+
+        assertEquals(HttpStatus.CREATED.value(), response.statusCode());
+        JsonNode body = response.body();
+        assertTrue(body.has("id"));
+        assertTrue(body.has("code"));
+        assertTrue(body.has("description"));
+        assertTrue(body.has("discountValue"));
+        assertTrue(body.has("expirationDate"));
+        assertTrue(body.has("published"));
+        assertTrue(body.has("deleted"));
+        assertTrue(body.has("deletedAt"));
+        assertEquals("CTR001", body.get("code").asText());
+        assertEquals("Contract test coupon", body.get("description").asText());
+        assertEquals(0, new BigDecimal("10.50").compareTo(body.get("discountValue").decimalValue()));
+        assertTrue(body.get("published").asBoolean());
+        assertFalse(body.get("deleted").asBoolean());
+        assertTrue(body.get("deletedAt").isNull());
+    }
+
     private HttpResponse<JsonNode> postCoupon(String code, String description, BigDecimal discountValue,
                                               LocalDateTime expirationDate, boolean published)
             throws IOException, InterruptedException {
@@ -352,8 +421,8 @@ class CouponControllerIntegrationTest {
         }
 
         @Override
-        public java.util.Optional<HttpResponse<JsonNode>> previousResponse() {
-            return java.util.Optional.empty();
+        public Optional<HttpResponse<JsonNode>> previousResponse() {
+            return Optional.empty();
         }
 
         @Override
@@ -367,7 +436,7 @@ class CouponControllerIntegrationTest {
         }
 
         @Override
-        public java.util.Optional<javax.net.ssl.SSLSession> sslSession() {
+        public Optional<SSLSession> sslSession() {
             return delegate.sslSession();
         }
 

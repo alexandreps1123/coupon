@@ -170,3 +170,57 @@ Diretriz de acoplamento:
 ## Observações
 - Banco padrão do projeto em testes/local: H2 em memória.
 - Para detalhes de contratos, usar Swagger UI.
+
+## Observabilidade
+
+### Endpoints úteis
+
+- `GET /actuator/health`
+- `GET /actuator/info`
+- `GET /actuator/metrics`
+- `GET /actuator/prometheus`
+
+Exemplos:
+
+```bash
+curl -s http://localhost:8080/actuator/metrics
+curl -s http://localhost:8080/actuator/metrics/coupon.create.requests
+curl -s http://localhost:8080/actuator/metrics/coupon.delete.requests
+curl -s http://localhost:8080/actuator/prometheus
+```
+
+### Métricas de domínio
+
+#### `coupon.create.requests`
+Contador de tentativas de criação com tag `outcome`.
+
+Outcomes:
+- `created`: cupom criado com sucesso.
+- `idempotent_hit`: requisição repetida (mesmo payload para o mesmo `code`) retornou recurso existente.
+- `conflict_existing_code`: conflito por `code` já existente com payload diferente.
+
+Interpretação rápida:
+- `created` alto e estável: fluxo saudável de criação.
+- aumento de `idempotent_hit`: clientes fazendo retry/repetição (esperado em cenários distribuídos).
+- aumento de `conflict_existing_code`: possível colisão de códigos ou problema de integração de cliente.
+
+#### `coupon.delete.requests`
+Contador de tentativas de deleção com tag `outcome`.
+
+Outcomes:
+- `deleted`: soft delete realizado.
+- `already_deleted`: tentativa de deletar cupom já deletado.
+- `not_found`: cupom não encontrado para o `code` informado.
+
+Interpretação rápida:
+- `deleted` predominante: comportamento esperado.
+- aumento de `already_deleted`: retries de delete ou chamadas duplicadas.
+- aumento de `not_found`: cliente com `code` incorreto/desatualizado ou integração inconsistente.
+
+### Correlação de requisição
+
+A API aceita e devolve `X-Request-Id`.
+
+- Se o header for enviado pelo cliente, ele é reutilizado.
+- Se não for enviado, a aplicação gera automaticamente.
+- O `requestId` também é incluído nos logs para facilitar troubleshooting.
