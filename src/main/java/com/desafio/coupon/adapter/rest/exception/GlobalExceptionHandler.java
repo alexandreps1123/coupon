@@ -17,7 +17,7 @@ import com.desafio.coupon.application.exception.CouponCodeAlreadyExistsException
 import com.desafio.coupon.application.exception.CouponNotFoundException;
 import com.desafio.coupon.application.exception.DomainException;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackages = "com.desafio.coupon.adapter.rest.controller")
 public class GlobalExceptionHandler {
     private final Clock clock;
 
